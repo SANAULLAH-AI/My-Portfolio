@@ -22,11 +22,10 @@ import axios from 'axios';
 import Icon from 'react-native-vector-icons/FontAwesome';
 
 // Constants
-const API_KEY = '0f012c42b77a742b6b060aa933188a9c'; // TMDB API key
+const API_KEY = '0f012c42b77a742b6b060aa933188a9c'; // Replace with your TMDB API key
 const BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_URL = 'https://image.tmdb.org/t/p/w500';
 const DISNEY_API_URL = 'https://api.disneyapi.dev';
-const SERVER_URL = 'http://192.168.100.147:4000/api';
 const STORAGE_KEY = '@disney_movies';
 const USER_KEY = '@disney_user';
 const FAV_KEY = '@disney_favorites';
@@ -41,11 +40,6 @@ const App = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [isSignup, setIsSignup] = useState(false);
-  const [forgotPassword, setForgotPassword] = useState(false);
-  const [resetToken, setResetToken] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [movies, setMovies] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -91,35 +85,6 @@ const App = () => {
   const theme = isDarkMode ? darkTheme : lightTheme;
 
   // Authentication
-  const handleSignup = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      if (!email || !password || !confirmPassword) {
-        setError('Please fill in all fields');
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError('Passwords do not match');
-        return;
-      }
-
-      const response = await axios.post(`${SERVER_URL}/signup`, { email, password });
-      Alert.alert('Success', response.data.message);
-      setIsLoggedIn(true);
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify({ email }));
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
-      setIsSignup(false);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Signup failed. Please try again.');
-      console.error('Signup Error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleLogin = async () => {
     try {
       setLoading(true);
@@ -128,59 +93,13 @@ const App = () => {
         setError('Please enter email and password');
         return;
       }
-
-      const response = await axios.post(`${SERVER_URL}/login`, { email, password });
-      Alert.alert('Success', response.data.message);
+      await AsyncStorage.setItem(USER_KEY, JSON.stringify({ email }));
       setIsLoggedIn(true);
-      await AsyncStorage.setItem(USER_KEY, JSON.stringify({ email, token: response.data.token }));
       setEmail('');
       setPassword('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed. Please try again.');
+      setError('Login failed. Please try again.');
       console.error('Login Error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      if (!email) {
-        setError('Please enter your email');
-        return;
-      }
-
-      const response = await axios.post(`${SERVER_URL}/forgot-password`, { email });
-      Alert.alert('Success', response.data.message);
-      setForgotPassword(true); // Keep forgotPassword true to allow token input
-      setEmail('');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to process request. Please try again.');
-      console.error('Forgot Password Error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResetPassword = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      if (!resetToken || !newPassword) {
-        setError('Please enter the reset token and new password');
-        return;
-      }
-
-      const response = await axios.post(`${SERVER_URL}/reset-password`, { token: resetToken, newPassword });
-      Alert.alert('Success', response.data.message);
-      setForgotPassword(false);
-      setResetToken('');
-      setNewPassword('');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reset password. Please try again.');
-      console.error('Reset Password Error:', err);
     } finally {
       setLoading(false);
     }
@@ -453,97 +372,37 @@ const App = () => {
     return (
       <SafeAreaView style={[styles.authContainer, { backgroundColor: theme.background }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={theme.secondary} />
-        <View style={styles.authHeader}>
-          <Image
-            source={{ uri: 'https://via.placeholder.com/100' }} // Replace with Disney+ logo URL
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={[styles.authTitle, { color: theme.text }]}>Disney+</Text>
-          <Text style={[styles.authSubtitle, { color: theme.text + '80' }]}>
-            {forgotPassword ? 'Reset Your Password' : isSignup ? 'Create Your Account' : 'Welcome Back'}
-          </Text>
-        </View>
+        <Text style={[styles.authTitle, { color: theme.text }]}>Disney+</Text>
         <View style={[styles.authCard, { backgroundColor: theme.cardBackground }]}>
           <TextInput
-            style={[styles.input, { backgroundColor: theme.secondary, color: theme.text, borderColor: theme.shadow }]}
+            style={[styles.input, { backgroundColor: theme.secondary, color: theme.text }]}
             placeholder="Email"
-            placeholderTextColor={theme.text + '80'}
+            placeholderTextColor={theme.text}
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
             keyboardType="email-address"
           />
-          {!forgotPassword && (
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.secondary, color: theme.text, borderColor: theme.shadow }]}
-              placeholder="Password"
-              placeholderTextColor={theme.text + '80'}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-          )}
-          {isSignup && !forgotPassword && (
-            <TextInput
-              style={[styles.input, { backgroundColor: theme.secondary, color: theme.text, borderColor: theme.shadow }]}
-              placeholder="Confirm Password"
-              placeholderTextColor={theme.text + '80'}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-            />
-          )}
-          {forgotPassword && (
-            <>
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.secondary, color: theme.text, borderColor: theme.shadow }]}
-                placeholder="Reset Token (from email)"
-                placeholderTextColor={theme.text + '80'}
-                value={resetToken}
-                onChangeText={setResetToken}
-              />
-              <TextInput
-                style={[styles.input, { backgroundColor: theme.secondary, color: theme.text, borderColor: theme.shadow }]}
-                placeholder="New Password"
-                placeholderTextColor={theme.text + '80'}
-                value={newPassword}
-                onChangeText={setNewPassword}
-                secureTextEntry
-              />
-            </>
-          )}
+          <TextInput
+            style={[styles.input, { backgroundColor: theme.secondary, color: theme.text }]}
+            placeholder="Password"
+            placeholderTextColor={theme.text}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
           {error && <Text style={[styles.errorText, { color: theme.accent }]}>{error}</Text>}
           <TouchableOpacity
-            style={[styles.authButton, { backgroundColor: theme.primary }]}
-            onPress={forgotPassword ? (resetToken ? handleResetPassword : handleForgotPassword) : isSignup ? handleSignup : handleLogin}
+            style={[styles.loginButton, { backgroundColor: theme.primary }]}
+            onPress={handleLogin}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.authButtonText}>
-                {forgotPassword ? (resetToken ? 'Reset Password' : 'Send Reset Link') : isSignup ? 'Sign Up' : 'Login'}
-              </Text>
+              <Text style={styles.loginButtonText}>Login</Text>
             )}
           </TouchableOpacity>
-          {!forgotPassword && (
-            <TouchableOpacity onPress={() => setIsSignup(!isSignup)}>
-              <Text style={[styles.switchText, { color: theme.primary }]}>
-                {isSignup ? 'Already have an account? Login' : 'Need an account? Sign Up'}
-              </Text>
-            </TouchableOpacity>
-          )}
-          {!isSignup && !forgotPassword && (
-            <TouchableOpacity onPress={() => setForgotPassword(true)}>
-              <Text style={[styles.forgotText, { color: theme.primary }]}>Forgot Password?</Text>
-            </TouchableOpacity>
-          )}
-          {forgotPassword && !resetToken && (
-            <TouchableOpacity onPress={() => setForgotPassword(false)}>
-              <Text style={[styles.switchText, { color: theme.primary }]}>Back to Login</Text>
-            </TouchableOpacity>
-          )}
         </View>
         <TouchableOpacity style={styles.themeToggle} onPress={() => setIsDarkMode(!isDarkMode)}>
           <Icon name={isDarkMode ? 'sun-o' : 'moon-o'} size={28} color={theme.text} />
@@ -840,52 +699,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: width * 0.05,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
-  authHeader: {
-    alignItems: 'center',
+  authTitle: {
+    fontSize: width * 0.1,
+    fontWeight: 'bold',
     marginBottom: height * 0.05,
   },
-  logo: {
-    width: width * 0.25,
-    height: width * 0.25,
-    marginBottom: height * 0.02,
-  },
-  authTitle: {
-    fontSize: width * 0.12,
-    fontWeight: 'bold',
-    letterSpacing: 1.5,
-  },
-  authSubtitle: {
-    fontSize: width * 0.045,
-    fontWeight: '300',
-    marginTop: height * 0.01,
-  },
   authCard: {
-    width: '90%',
-    padding: width * 0.06,
-    borderRadius: 20,
-    elevation: 10,
+    width: '100%',
+    padding: width * 0.05,
+    borderRadius: 15,
+    elevation: 5,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
   },
   input: {
     width: '100%',
     padding: height * 0.02,
-    marginBottom: height * 0.025,
-    borderRadius: 12,
+    marginBottom: height * 0.02,
+    borderRadius: 10,
     fontSize: width * 0.04,
-    borderWidth: 1,
-    elevation: 2,
   },
-  authButton: {
+  loginButton: {
     padding: height * 0.02,
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
-    marginBottom: height * 0.015,
-    elevation: 3,
   },
-  authButtonText: {
+  loginButtonText: {
     color: '#fff',
     fontSize: width * 0.045,
     fontWeight: '600',
@@ -893,17 +734,6 @@ const styles = StyleSheet.create({
   errorText: {
     marginBottom: height * 0.02,
     fontSize: width * 0.035,
-    textAlign: 'center',
-  },
-  switchText: {
-    fontSize: width * 0.035,
-    textAlign: 'center',
-    marginTop: height * 0.015,
-  },
-  forgotText: {
-    fontSize: width * 0.035,
-    textAlign: 'center',
-    marginTop: height * 0.015,
   },
   themeToggle: {
     marginTop: height * 0.04,
