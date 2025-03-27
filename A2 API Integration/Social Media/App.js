@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,80 +6,105 @@ import {
   FlatList,
   Image,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Modal,
   Alert,
   Dimensions,
   StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker'; // For image uploads
-import { Ionicons } from '@expo/vector-icons'; // For icons
-import { Video } from 'expo-av'; // For video playback
+import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
+import { Video } from 'expo-av';
+import axios from 'axios';
 
 const { width, height } = Dimensions.get('window');
 
 const App = () => {
-  // State for authentication
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-
-  // State for posts
-  const [posts, setPosts] = useState([
-    {
-      id: 1,
-      user: 'user1',
-      content: 'This is a text post!',
-      type: 'text',
-      likes: 10,
-      comments: [],
-    },
-    {
-      id: 2,
-      user: 'user2',
-      content: 'https://picsum.photos/500',
-      type: 'image',
-      likes: 20,
-      comments: [],
-    },
-    {
-      id: 3,
-      user: 'user3',
-      content: 'http://d23dyxeqlo5psv.cloudfront.net/big_buck_bunny.mp4',
-      type: 'video',
-      likes: 30,
-      comments: [],
-    },
-  ]);
+  const [userData, setUserData] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [posts, setPosts] = useState([]);
   const [newPost, setNewPost] = useState('');
   const [newPostImage, setNewPostImage] = useState(null);
   const [newPostVideo, setNewPostVideo] = useState(null);
-
-  // State for profile
   const [profile, setProfile] = useState({
     bio: 'Welcome to my profile!',
     posts: [],
     followers: 0,
     following: 0,
     isFollowing: false,
+    profilePicture: null,
   });
-
-  // State for chat
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-
-  // State for notifications
   const [notifications, setNotifications] = useState([]);
-
-  // State for modals
   const [isCreatePostModalVisible, setIsCreatePostModalVisible] = useState(false);
-  const [activeScreen, setActiveScreen] = useState('Feed'); // Track active screen
+  const [activeScreen, setActiveScreen] = useState('Feed');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [isEditProfileModalVisible, setIsEditProfileModalVisible] = useState(false);
+  const [updatedBio, setUpdatedBio] = useState('');
+
+  // Fetch Posts from API
+  const fetchPosts = async () => {
+    try {
+      setIsLoading(true);
+      const response = await axios.get('https://jsonplaceholder.typicode.com/users');
+      const formattedPosts = response.data.map((user) => ({
+        id: user.id,
+        user: user.name,
+        username: user.username,
+        content: `Hi, I'm ${user.name}! This is my post.`,
+        type: 'text',
+        likes: Math.floor(Math.random() * 100),
+        comments: [],
+        profilePicture: `https://i.pravatar.cc/150?u=${user.id}`,
+      }));
+      setPosts(formattedPosts);
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+      Alert.alert('Error', 'Failed to fetch posts. Please try again later.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch User Data from API
+  const fetchUserData = async (username) => {
+    try {
+      setIsLoading(true);
+      const response = await axios.get('https://jsonplaceholder.typicode.com/users');
+      const user = response.data.find((u) => u.username === username);
+      if (user) {
+        setUserData(user);
+        setProfile((prevProfile) => ({
+          ...prevProfile,
+          bio: `Hi, I'm ${user.name}!`,
+        }));
+      } else {
+        Alert.alert('Error', 'User not found');
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+      Alert.alert('Error', 'Failed to fetch user data. Please try again later.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Login and Signup
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (username && password) {
+      await fetchUserData(username);
       setIsLoggedIn(true);
+      setProfile((prevProfile) => ({
+        ...prevProfile,
+        username: username, // Set username as profile name
+      }));
       setNotifications([{ id: 1, content: 'Welcome back!' }]);
     } else {
       Alert.alert('Error', 'Please enter username and password');
@@ -89,33 +114,65 @@ const App = () => {
   const handleSignup = () => {
     if (username && password) {
       setIsLoggedIn(true);
-      setProfile({ ...profile, bio: `Hi, I'm ${username}!` });
+      setProfile((prevProfile) => ({
+        ...prevProfile,
+        username: username, // Set username as profile name
+        bio: `Hi, I'm ${username}!`,
+      }));
       setNotifications([{ id: 1, content: 'Welcome to the app!' }]);
     } else {
       Alert.alert('Error', 'Please enter username and password');
     }
   };
 
-  // Create Post
+  // Pick Image/Video for Post
   const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
+    try {
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
 
-    if (!result.cancelled) {
-      if (result.type === 'image') {
-        setNewPostImage(result.uri);
-        setNewPostVideo(null);
-      } else if (result.type === 'video') {
-        setNewPostVideo(result.uri);
-        setNewPostImage(null);
+      if (!result.canceled) {
+        if (result.assets[0].type === 'image') {
+          setNewPostImage(result.assets[0].uri);
+          setNewPostVideo(null);
+        } else if (result.assets[0].type === 'video') {
+          setNewPostVideo(result.assets[0].uri);
+          setNewPostImage(null);
+        }
       }
+    } catch (error) {
+      console.error('Error picking image/video:', error);
+      Alert.alert('Error', 'Failed to pick image/video. Please try again.');
     }
   };
 
+  // Pick Profile Photo
+  const pickProfilePhoto = async () => {
+    try {
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        setProfile((prevProfile) => ({
+          ...prevProfile,
+          profilePicture: result.assets[0].uri,
+        }));
+      }
+    } catch (error) {
+      console.error('Error picking profile photo:', error);
+      Alert.alert('Error', 'Failed to pick profile photo. Please try again.');
+    }
+  };
+
+  // Create Post
   const handleCreatePost = () => {
     if (newPost || newPostImage || newPostVideo) {
       const post = {
@@ -126,15 +183,17 @@ const App = () => {
         likes: 0,
         comments: [],
       };
-      setPosts([post, ...posts]); // Add the new post to the top of the feed
+      setPosts([post, ...posts]);
       setProfile((prevProfile) => ({
         ...prevProfile,
-        posts: [post, ...prevProfile.posts], // Add the new post to the profile posts
+        posts: [post, ...prevProfile.posts],
       }));
       setNewPost('');
       setNewPostImage(null);
       setNewPostVideo(null);
       setIsCreatePostModalVisible(false);
+    } else {
+      Alert.alert('Error', 'Please enter some content for your post.');
     }
   };
 
@@ -152,6 +211,8 @@ const App = () => {
     if (newMessage) {
       setMessages([...messages, { id: messages.length + 1, content: newMessage, user: 'You' }]);
       setNewMessage('');
+    } else {
+      Alert.alert('Error', 'Please enter a message.');
     }
   };
 
@@ -170,6 +231,22 @@ const App = () => {
       },
     ]);
   };
+
+  // Edit Profile
+  const handleEditProfile = () => {
+    setProfile((prevProfile) => ({
+      ...prevProfile,
+      bio: updatedBio,
+    }));
+    setIsEditProfileModalVisible(false);
+  };
+
+  // Fetch Posts on Initial Load
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchPosts();
+    }
+  }, [isLoggedIn]);
 
   // Render Login/Signup Screen
   if (!isLoggedIn) {
@@ -199,224 +276,350 @@ const App = () => {
     );
   }
 
-  // Render Main App
-  return (
-    <View style={styles.container}>
-      {/* Status Bar for Android */}
-      <StatusBar backgroundColor="#007BFF" barStyle="light-content" />
-
-      {/* App Name Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Social Media App</Text>
+ // Inside the main App component's return statement
+return (
+  <View style={styles.container}>
+    <StatusBar backgroundColor="#007BFF" barStyle="light-content" />
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>Social Media App</Text>
+    </View>
+    <View style={styles.topNavBar}>
+      {['Feed', 'Profile', 'Chat', 'Notifications'].map((screen) => (
+        <TouchableOpacity
+          key={screen}
+          style={[styles.navItem, activeScreen === screen && styles.navItemActive]}
+          onPress={() => setActiveScreen(screen)}
+        >
+          <Ionicons
+            name={
+              screen === 'Feed'
+                ? 'home'
+                : screen === 'Profile'
+                ? 'person'
+                : screen === 'Chat'
+                ? 'chatbubbles'
+                : 'notifications'
+            }
+            size={24}
+            color={activeScreen === screen ? '#007BFF' : '#888'}
+          />
+          <Text style={[styles.navText, activeScreen === screen && styles.navTextActive]}>
+            {screen}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+    {isLoading && (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007BFF" />
       </View>
+    )}
+    {activeScreen === 'Feed' && (
+      <FlatList
+        data={posts}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
+          <PostItem
+            item={item}
+            onPress={() => setSelectedUser(item.userId)}
+            onLike={handleLikePost}
+          />
+        )}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={fetchPosts} />
+        }
+      />
+    )}
+    {activeScreen === 'Profile' && (
+      <ProfileScreen
+        profile={profile}
+        handleFollow={handleFollow}
+        setIsCreatePostModalVisible={setIsCreatePostModalVisible}
+        setIsEditProfileModalVisible={setIsEditProfileModalVisible}
+        pickProfilePhoto={pickProfilePhoto}
+      />
+    )}
+    {activeScreen === 'Chat' && (
+      <ChatScreen
+        messages={messages}
+        newMessage={newMessage}
+        setNewMessage={setNewMessage}
+        handleSendMessage={handleSendMessage}
+      />
+    )}
+    {activeScreen === 'Notifications' && (
+      <NotificationsScreen notifications={notifications} />
+    )}
+    <CreatePostModal
+      isVisible={isCreatePostModalVisible}
+      newPost={newPost}
+      setNewPost={setNewPost}
+      newPostImage={newPostImage}
+      newPostVideo={newPostVideo}
+      pickImage={pickImage}
+      handleCreatePost={handleCreatePost}
+      setIsCreatePostModalVisible={setIsCreatePostModalVisible}
+    />
+    <EditProfileModal
+      isVisible={isEditProfileModalVisible}
+      updatedBio={updatedBio}
+      setUpdatedBio={setUpdatedBio}
+      handleEditProfile={handleEditProfile}
+      setIsEditProfileModalVisible={setIsEditProfileModalVisible}
+    />
 
-      {/* Top Navigation Bar */}
-      <View style={styles.topNavBar}>
-        {['Feed', 'Profile', 'Chat', 'Notifications'].map((screen) => (
+    {/* Conditionally render the Create Post button */}
+    {(activeScreen === 'Feed' || activeScreen === 'Profile') && (
+      <TouchableOpacity
+        style={styles.createPostButton}
+        onPress={() => setIsCreatePostModalVisible(true)}
+      >
+        <Ionicons name="add" size={30} color="white" />
+        <Text style={styles.createPostButtonText}>Create Post</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+);
+};
+
+// PostItem Component
+const PostItem = React.memo(({ item, onPress, onLike }) => {
+  return (
+    <TouchableOpacity onPress={onPress}>
+      <View style={styles.post}>
+        <View style={styles.postHeader}>
+          <Image source={{ uri: item.profilePicture }} style={styles.profilePicture} />
+          <View>
+            <Text style={styles.postUser}>{item.user}</Text>
+            <Text style={styles.postUsername}>@{item.username}</Text>
+          </View>
+        </View>
+        {item.type === 'image' && <Image source={{ uri: item.content }} style={styles.postImage} />}
+        {item.type === 'video' && (
+          <Video source={{ uri: item.content }} style={styles.postVideo} useNativeControls resizeMode="cover" isLooping />
+        )}
+        {item.type === 'text' && <Text style={styles.postContent}>{item.content}</Text>}
+        <View style={styles.postActions}>
+          <TouchableOpacity style={styles.postAction} onPress={() => onLike(item.id)}>
+            <Ionicons name="heart-outline" size={24} color="#FF4444" />
+            <Text style={styles.postActionText}>{item.likes} Likes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.postAction}>
+            <Ionicons name="chatbubble-outline" size={24} color="#888" />
+            <Text style={styles.postActionText}>Comment</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.postAction}>
+            <Ionicons name="share-outline" size={24} color="#888" />
+            <Text style={styles.postActionText}>Share</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+// ProfileScreen Component
+const ProfileScreen = ({
+  profile,
+  handleFollow,
+  setIsCreatePostModalVisible,
+  setIsEditProfileModalVisible,
+  pickProfilePhoto,
+}) => {
+  return (
+    <FlatList
+      ListHeaderComponent={
+        <View style={styles.profileHeader}>
+          <TouchableOpacity onPress={pickProfilePhoto}>
+            {profile.profilePicture ? (
+              <Image source={{ uri: profile.profilePicture }} style={styles.profilePictureLarge} />
+            ) : (
+              <Ionicons name="person-circle" size={80} color="#007BFF" />
+            )}
+          </TouchableOpacity>
+          <Text style={styles.profileUsername}>{profile.username}</Text>
+          <Text style={styles.profileBio}>{profile.bio}</Text>
+          <View style={styles.profileStats}>
+            <Text style={styles.profileStat}>Followers: {profile.followers}</Text>
+            <Text style={styles.profileStat}>Following: {profile.following}</Text>
+          </View>
           <TouchableOpacity
-            key={screen}
             style={[
-              styles.navItem,
-              activeScreen === screen && styles.navItemActive,
+              styles.followButton,
+              profile.isFollowing && styles.followButtonActive,
             ]}
-            onPress={() => setActiveScreen(screen)}
+            onPress={handleFollow}
           >
-            <Ionicons
-              name={
-                screen === 'Feed'
-                  ? 'home'
-                  : screen === 'Profile'
-                  ? 'person'
-                  : screen === 'Chat'
-                  ? 'chatbubbles'
-                  : 'notifications'
-              }
-              size={24}
-              color={activeScreen === screen ? '#007BFF' : '#888'}
-            />
-            <Text
-              style={[
-                styles.navText,
-                activeScreen === screen && styles.navTextActive,
-              ]}
-            >
-              {screen}
+            <Text style={styles.followButtonText}>
+              {profile.isFollowing ? 'Unfollow' : 'Follow'}
             </Text>
           </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Feed Screen */}
-      {activeScreen === 'Feed' && (
-        <ScrollView style={styles.screenContainer}>
-          <FlatList
-            data={posts}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <View style={styles.post}>
-                {/* Post Header */}
-                <View style={styles.postHeader}>
-                  <Ionicons name="person-circle" size={40} color="#007BFF" />
-                  <Text style={styles.postUser}>{item.user}</Text>
-                </View>
-
-                {/* Post Content */}
-                {item.type === 'image' && (
-                  <Image source={{ uri: item.content }} style={styles.postImage} />
-                )}
-                {item.type === 'video' && (
-                  <Video
-                    source={{ uri: item.content }}
-                    style={styles.postVideo}
-                    useNativeControls
-                    resizeMode="cover"
-                    isLooping
-                  />
-                )}
-                {item.type === 'text' && (
-                  <Text style={styles.postContent}>{item.content}</Text>
-                )}
-
-                {/* Post Actions */}
-                <View style={styles.postActions}>
-                  <TouchableOpacity
-                    style={styles.postAction}
-                    onPress={() => handleLikePost(item.id)}
-                  >
-                    <Ionicons name="heart-outline" size={24} color="#FF4444" />
-                    <Text style={styles.postActionText}>{item.likes} Likes</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.postAction}>
-                    <Ionicons name="chatbubble-outline" size={24} color="#888" />
-                    <Text style={styles.postActionText}>Comment</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.postAction}>
-                    <Ionicons name="share-outline" size={24} color="#888" />
-                    <Text style={styles.postActionText}>Share</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-          />
-        </ScrollView>
-      )}
-
-      {/* Profile Screen */}
-      {activeScreen === 'Profile' && (
-        <ScrollView style={styles.screenContainer}>
-          <View style={styles.profileHeader}>
-            <Ionicons name="person-circle" size={80} color="#007BFF" />
-            <Text style={styles.profileUsername}>{username}</Text>
-            <Text style={styles.profileBio}>{profile.bio}</Text>
-            <View style={styles.profileStats}>
-              <Text style={styles.profileStat}>Followers: {profile.followers}</Text>
-              <Text style={styles.profileStat}>Following: {profile.following}</Text>
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.followButton,
-                profile.isFollowing && styles.followButtonActive,
-              ]}
-              onPress={handleFollow}
-            >
-              <Text style={styles.followButtonText}>
-                {profile.isFollowing ? 'Unfollow' : 'Follow'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Create Post Button in Profile Screen */}
           <TouchableOpacity
-            style={styles.createPostButton}
-            onPress={() => setIsCreatePostModalVisible(true)}
+            style={styles.editProfileButton}
+            onPress={() => setIsEditProfileModalVisible(true)}
           >
-            <Ionicons name="add-circle" size={40} color="#007BFF" />
+            <Text style={styles.editProfileButtonText}>Edit Profile</Text>
           </TouchableOpacity>
-        </ScrollView>
-      )}
+        </View>
+      }
+      data={profile.posts}
+      keyExtractor={(item) => item.id.toString()}
+      renderItem={({ item }) => <PostItem item={item} />}
+    />
+  );
+};
 
-      {/* Chat Screen */}
-      {activeScreen === 'Chat' && (
-        <View style={styles.screenContainer}>
-          <FlatList
-            data={messages}
-            keyExtractor={(item) => item.id.toString()}
-            renderItem={({ item }) => (
-              <View
-                style={[
-                  styles.message,
-                  item.user === 'You' ? styles.messageRight : styles.messageLeft,
-                ]}
-              >
-                <Text style={styles.messageText}>{item.content}</Text>
-              </View>
-            )}
-          />
-          <View style={styles.chatInputContainer}>
-            <TextInput
-              style={styles.chatInput}
-              placeholder="Type a message..."
-              value={newMessage}
-              onChangeText={setNewMessage}
-            />
-            <TouchableOpacity style={styles.chatSendButton} onPress={handleSendMessage}>
-              <Ionicons name="send" size={24} color="#007BFF" />
-            </TouchableOpacity>
+// ChatScreen Component
+const ChatScreen = ({ messages, newMessage, setNewMessage, handleSendMessage }) => {
+  return (
+    <View style={styles.screenContainer}>
+      <FlatList
+        data={messages}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => (
+          <View
+            style={[
+              styles.message,
+              item.user === 'You' ? styles.messageRight : styles.messageLeft,
+            ]}
+          >
+            <Text style={styles.messageText}>{item.content}</Text>
           </View>
+        )}
+      />
+      <View style={styles.chatInputContainer}>
+        <TextInput
+          style={styles.chatInput}
+          placeholder="Type a message..."
+          value={newMessage}
+          onChangeText={setNewMessage}
+        />
+        <TouchableOpacity style={styles.chatSendButton} onPress={handleSendMessage}>
+          <Ionicons name="send" size={24} color="#007BFF" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+// NotificationsScreen Component
+const NotificationsScreen = ({ notifications }) => {
+  return (
+    <FlatList
+      data={notifications}
+      keyExtractor={(item) => item.id.toString()}
+      renderItem={({ item }) => (
+        <View style={styles.notification}>
+          <Text style={styles.notificationText}>{item.content}</Text>
         </View>
       )}
+    />
+  );
+};
 
-      {/* Notifications Screen */}
-      {activeScreen === 'Notifications' && (
-        <FlatList
-          data={notifications}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
-            <View style={styles.notification}>
-              <Text style={styles.notificationText}>{item.content}</Text>
-            </View>
-          )}
-        />
-      )}
-
-      {/* Create Post Modal */}
-      <Modal visible={isCreatePostModalVisible} animationType="slide" transparent={true}>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Create Post</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="What's on your mind?"
-              value={newPost}
-              onChangeText={setNewPost}
-              multiline
+// CreatePostModal Component
+const CreatePostModal = ({
+  isVisible,
+  newPost,
+  setNewPost,
+  newPostImage,
+  newPostVideo,
+  pickImage,
+  handleCreatePost,
+  setIsCreatePostModalVisible,
+}) => {
+  return (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={isVisible}
+      onRequestClose={() => setIsCreatePostModalVisible(false)}
+    >
+      <View style={styles.modalContainer}>
+               <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Create Post</Text>
+          <TextInput
+            style={styles.modalInput}
+            placeholder="What's on your mind?"
+            value={newPost}
+            onChangeText={setNewPost}
+            multiline
+          />
+          <TouchableOpacity style={styles.modalButton} onPress={pickImage}>
+            <Text style={styles.modalButtonText}>Upload Image/Video</Text>
+          </TouchableOpacity>
+          {newPostImage && <Image source={{ uri: newPostImage }} style={styles.previewImage} />}
+          {newPostVideo && (
+            <Video
+              source={{ uri: newPostVideo }}
+              style={styles.previewVideo}
+              useNativeControls
+              resizeMode="cover"
+              isLooping
             />
-            <TouchableOpacity style={styles.modalButton} onPress={pickImage}>
-              <Text style={styles.modalButtonText}>Upload Image/Video</Text>
-            </TouchableOpacity>
-            {newPostImage && <Image source={{ uri: newPostImage }} style={styles.previewImage} />}
-            {newPostVideo && (
-              <Video
-                source={{ uri: newPostVideo }}
-                style={styles.previewVideo}
-                useNativeControls
-                resizeMode="cover"
-                isLooping
-              />
-            )}
-            <TouchableOpacity style={styles.modalButton} onPress={handleCreatePost}>
-              <Text style={styles.modalButtonText}>Post</Text>
-            </TouchableOpacity>
+          )}
+          <View style={styles.modalActions}>
             <TouchableOpacity
-              style={styles.modalButton}
+              style={[styles.modalActionButton, styles.modalActionButtonCancel]}
               onPress={() => setIsCreatePostModalVisible(false)}
             >
-              <Text style={styles.modalButtonText}>Cancel</Text>
+              <Text style={styles.modalActionButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalActionButton, styles.modalActionButtonPost]}
+              onPress={handleCreatePost}
+            >
+              <Text style={styles.modalActionButtonText}>Post</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </Modal>
-    </View>
+      </View>
+    </Modal>
+  );
+};
+
+// EditProfileModal Component
+const EditProfileModal = ({
+  isVisible,
+  updatedBio,
+  setUpdatedBio,
+  handleEditProfile,
+  setIsEditProfileModalVisible,
+}) => {
+  return (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={isVisible}
+      onRequestClose={() => setIsEditProfileModalVisible(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Edit Profile</Text>
+          <TextInput
+            style={styles.modalInput}
+            placeholder="Update your bio..."
+            value={updatedBio}
+            onChangeText={setUpdatedBio}
+            multiline
+          />
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              style={[styles.modalActionButton, styles.modalActionButtonCancel]}
+              onPress={() => setIsEditProfileModalVisible(false)}
+            >
+              <Text style={styles.modalActionButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalActionButton, styles.modalActionButtonPost]}
+              onPress={handleEditProfile}
+            >
+              <Text style={styles.modalActionButtonText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
@@ -424,34 +627,36 @@ const App = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
+    position: 'relative', // Ensure the sticky button is positioned correctly
   },
   authContainer: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
-    backgroundColor: '#f5f5f5',
   },
   authTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 20,
-    textAlign: 'center',
-    color: '#007BFF',
   },
   authInput: {
-    borderWidth: 1,
+    width: '100%',
+    height: 40,
     borderColor: '#ccc',
-    padding: 15,
-    marginBottom: 15,
-    borderRadius: 10,
-    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 10,
   },
   authButton: {
+    width: '100%',
+    height: 40,
     backgroundColor: '#007BFF',
-    padding: 15,
-    borderRadius: 10,
+    justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 5,
     marginBottom: 10,
   },
   authButtonText: {
@@ -460,20 +665,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   header: {
-    padding: 20,
+    width: '100%',
+    height: 60,
     backgroundColor: '#007BFF',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
     color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   topNavBar: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    padding: 10,
-    backgroundColor: '#fff',
+    alignItems: 'center',
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#ccc',
   },
@@ -485,89 +692,79 @@ const styles = StyleSheet.create({
     borderBottomColor: '#007BFF',
   },
   navText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#888',
   },
-  screenContainer: {
+  navTextActive: {
+    color: '#007BFF',
+  },
+  loadingContainer: {
     flex: 1,
-    padding: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   post: {
-    backgroundColor: '#fff',
     padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
   },
   postHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 10,
   },
+  profilePicture: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  profilePictureLarge: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
   postUser: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginLeft: 10,
   },
-  postImage: {
-    width: '100%',
-    height: 300,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  postVideo: {
-    width: '100%',
-    height: 300,
-    borderRadius: 10,
-    marginBottom: 10,
+  postUsername: {
+    fontSize: 14,
+    color: '#888',
   },
   postContent: {
     fontSize: 14,
     color: '#333',
     marginBottom: 10,
   },
+  postImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  postVideo: {
+    width: '100%',
+    height: 200,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
   postActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    justifyContent: 'space-around',
   },
   postAction: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   postActionText: {
+    marginLeft: 5,
     fontSize: 14,
     color: '#888',
-    marginLeft: 5,
-  },
-  createPostButton: {
-    position: 'absolute',
-    bottom: 20,
-    right: 20,
-    backgroundColor: '#fff',
-    borderRadius: 30,
-    padding: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
   },
   profileHeader: {
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
   },
   profileUsername: {
     fontSize: 24,
@@ -576,9 +773,9 @@ const styles = StyleSheet.create({
   },
   profileBio: {
     fontSize: 16,
-    color: '#888',
-    marginTop: 5,
+    color: '#666',
     textAlign: 'center',
+    marginTop: 10,
   },
   profileStats: {
     flexDirection: 'row',
@@ -591,12 +788,13 @@ const styles = StyleSheet.create({
     color: '#333',
   },
   followButton: {
+    width: '80%',
+    height: 40,
     backgroundColor: '#007BFF',
-    padding: 10,
-    borderRadius: 10,
-    marginTop: 20,
-    width: '50%',
+    justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 5,
+    marginTop: 20,
   },
   followButtonActive: {
     backgroundColor: '#ccc',
@@ -606,8 +804,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  message: {
+  editProfileButton: {
+    width: '80%',
+    height: 40,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#007BFF',
+    marginTop: 10,
+  },
+  editProfileButtonText: {
+    color: '#007BFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  createPostButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
     backgroundColor: '#007BFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 30,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  createPostButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 10,
+  },
+  screenContainer: {
+    flex: 1,
+    padding: 15,
+  },
+  message: {
     padding: 10,
     borderRadius: 10,
     marginBottom: 10,
@@ -615,48 +855,41 @@ const styles = StyleSheet.create({
   },
   messageLeft: {
     alignSelf: 'flex-start',
-    backgroundColor: '#e5e5e5',
+    backgroundColor: '#f1f1f1',
   },
   messageRight: {
     alignSelf: 'flex-end',
     backgroundColor: '#007BFF',
   },
   messageText: {
-    fontSize: 14,
-    color: '#fff',
+    fontSize: 16,
+    color: '#333',
   },
   chatInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#ccc',
+    padding: 10,
   },
   chatInput: {
     flex: 1,
-    borderWidth: 1,
+    height: 40,
     borderColor: '#ccc',
-    padding: 10,
-    borderRadius: 10,
-    marginRight: 10,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 15,
   },
   chatSendButton: {
-    padding: 10,
+    marginLeft: 10,
   },
   notification: {
-    backgroundColor: '#fff',
     padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
   },
   notificationText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#333',
   },
   modalContainer: {
@@ -666,7 +899,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   modalContent: {
-    width: width * 0.9,
+    width: '90%',
     backgroundColor: '#fff',
     borderRadius: 10,
     padding: 20,
@@ -674,21 +907,25 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 10,
+    marginBottom: 20,
   },
   modalInput: {
-    borderWidth: 1,
+    width: '100%',
+    height: 100,
     borderColor: '#ccc',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 10,
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 20,
   },
   modalButton: {
+    width: '100%',
+    height: 40,
     backgroundColor: '#007BFF',
-    padding: 10,
-    borderRadius: 10,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+    borderRadius: 5,
+    marginBottom: 20,
   },
   modalButtonText: {
     color: '#fff',
@@ -697,15 +934,37 @@ const styles = StyleSheet.create({
   },
   previewImage: {
     width: '100%',
-    height: 150,
+    height: 200,
     borderRadius: 10,
-    marginBottom: 10,
+    marginBottom: 20,
   },
   previewVideo: {
     width: '100%',
-    height: 150,
+    height: 200,
     borderRadius: 10,
-    marginBottom: 10,
+    marginBottom: 20,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  modalActionButton: {
+    width: '48%',
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 5,
+  },
+  modalActionButtonCancel: {
+    backgroundColor: '#ccc',
+  },
+  modalActionButtonPost: {
+    backgroundColor: '#007BFF',
+  },
+  modalActionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 
