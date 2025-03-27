@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TextInput, FlatList, StyleSheet, TouchableOpacity, Image, Alert } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { View, Text, ScrollView, TextInput, FlatList, StyleSheet, TouchableOpacity, Image, ActivityIndicator, Dimensions, Alert, Modal } from 'react-native';
+import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { Button } from 'react-native-paper';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import * as Animatable from 'react-native-animatable'; // For animations
+
+// API Configuration
+const API_KEY = '0f012c42b77a742b6b060aa933188a9c'; // Your API key
+const BASE_URL = 'https://api.themoviedb.org/3';
+const IMAGE_URL = 'https://image.tmdb.org/t/p/w500';
+
+// Screen Dimensions
+const { width, height } = Dimensions.get('window');
 
 // Bottom Tab Navigator
 const Tab = createBottomTabNavigator();
@@ -16,7 +24,7 @@ const Stack = createStackNavigator();
 // Main App Component
 export default function App() {
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={DarkTheme}>
       <Tab.Navigator
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
@@ -32,10 +40,10 @@ export default function App() {
             }
             return <Icon name={iconName} size={size} color={color} />;
           },
-          tabBarActiveTintColor: '#FF6B6B', // Red color for active tab
+          tabBarActiveTintColor: '#E50914', // Netflix red color for active tab
           tabBarInactiveTintColor: '#888', // Gray color for inactive tab
           tabBarStyle: {
-            backgroundColor: '#FFFFFF', // White background for the tab bar
+            backgroundColor: '#141414', // Dark background for the tab bar
             borderTopWidth: 0,
             elevation: 10,
             shadowColor: '#000',
@@ -78,52 +86,157 @@ const HomeStack = () => {
 
 // Home Screen
 const HomeScreen = ({ navigation }) => {
-   const [events, setEvents] = useState([
-    { id: 1, name: 'Avengers: Endgame', type: 'movie', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQDLGqatUqSBfHww6iSqpA8K_SamMhinjoy4g&s' },
-    { id: 2, name: 'Coldplay Concert', type: 'event', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTsFmcfKrttr1UaNmPkSpRph06JmgK1fAImzg&s' },
-    { id: 3, name: 'Flight to Paris', type: 'travel', image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTohEK_YU3BaZH8dV7IQXISgxogc6q2j9sGcw&s' },
-  ]);
+  const [movies, setMovies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [favorites, setFavorites] = useState([]);
+
+  useEffect(() => {
+    const fetchMovies = async () => {
+      try {
+        const response = await axios.get(`${BASE_URL}/movie/popular`, {
+          params: {
+            api_key: API_KEY,
+          },
+        });
+        setMovies(response.data.results);
+      } catch (error) {
+        console.error('Error fetching movies:', error);
+        Alert.alert('Error', 'Failed to fetch movies. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMovies();
+  }, []);
+
+  const addToFavorites = (item) => {
+    if (!favorites.some((fav) => fav.id === item.id)) {
+      setFavorites([...favorites, item]);
+      Alert.alert('Added to Favorites', `${item.title} has been added to your favorites.`);
+    } else {
+      Alert.alert('Already in Favorites', `${item.title} is already in your favorites.`);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#E50914" />
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Ticket Booking App</Text>
-
-      {/* Events List */}
+      <Text style={styles.title}>Popular Movies</Text>
       <FlatList
-        data={events}
+        data={movies}
         keyExtractor={(item) => item.id.toString()}
+        horizontal
+        showsHorizontalScrollIndicator={false}
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.eventCard}
-            onPress={() => navigation.navigate('BookingDetails', { item })}
-          >
-            <Image source={{ uri: item.image }} style={styles.eventImage} />
-            <View style={styles.eventTextContainer}>
-              <Text style={styles.eventName}>{item.name}</Text>
-              <Text style={styles.eventType}>{item.type}</Text>
-            </View>
-          </TouchableOpacity>
+          <Animatable.View animation="fadeInUp" duration={1000}>
+            <TouchableOpacity
+              style={styles.movieCard}
+              onPress={() => navigation.navigate('BookingDetails', { item })}
+            >
+              <Image source={{ uri: `${IMAGE_URL}${item.poster_path}` }} style={styles.movieImage} />
+              <Text style={styles.movieTitle}>{item.title}</Text>
+              <TouchableOpacity style={styles.favoriteButton} onPress={() => addToFavorites(item)}>
+                <Icon name="favorite" size={24} color="#E50914" />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Animatable.View>
         )}
       />
+
+      <Text style={styles.title}>Favorites</Text>
+      {favorites.length === 0 ? (
+        <Text style={styles.subtitle}>No favorites yet.</Text>
+      ) : (
+        <FlatList
+          data={favorites}
+          keyExtractor={(item) => item.id.toString()}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          renderItem={({ item }) => (
+            <Animatable.View animation="fadeInUp" duration={1000}>
+              <TouchableOpacity
+                style={styles.movieCard}
+                onPress={() => navigation.navigate('BookingDetails', { item })}
+              >
+                <Image source={{ uri: `${IMAGE_URL}${item.poster_path}` }} style={styles.movieImage} />
+                <Text style={styles.movieTitle}>{item.title}</Text>
+              </TouchableOpacity>
+            </Animatable.View>
+          )}
+        />
+      )}
     </ScrollView>
   );
 };
 
 // Search Screen
-const SearchScreen = () => {
+const SearchScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const handleSearch = async () => {
+    if (!searchQuery) return;
+    setLoading(true);
+    try {
+      const response = await axios.get(`${BASE_URL}/search/movie`, {
+        params: {
+          api_key: API_KEY,
+          query: searchQuery,
+        },
+      });
+      setSearchResults(response.data.results);
+    } catch (error) {
+      console.error('Error searching movies:', error);
+      Alert.alert('Error', 'Failed to search movies. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
-      <TextInput
-        placeholder="Search for events, movies, or flights..."
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        style={styles.searchInput}
-      />
-      <Button mode="contained" onPress={() => Alert.alert('Search', `Query: ${searchQuery}`)}>
-        Search
-      </Button>
+      <View style={styles.searchBar}>
+        <TextInput
+          placeholder="Search for movies..."
+          placeholderTextColor="#888"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          style={styles.searchInput}
+        />
+        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
+          <Icon name="search" size={24} color="#FFF" />
+        </TouchableOpacity>
+      </View>
+      {loading ? (
+        <ActivityIndicator size="large" color="#E50914" />
+      ) : (
+        <FlatList
+          data={searchResults}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.searchResultCard}
+              onPress={() => navigation.navigate('BookingDetails', { item })}
+            >
+              <Image source={{ uri: `${IMAGE_URL}${item.poster_path}` }} style={styles.searchResultImage} />
+              <View style={styles.searchResultTextContainer}>
+                <Text style={styles.searchResultTitle}>{item.title}</Text>
+                <Text style={styles.searchResultOverview} numberOfLines={2}>
+                  {item.overview}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </View>
   );
 };
@@ -133,123 +246,219 @@ const BookingDetailsScreen = ({ route, navigation }) => {
   const { item } = route.params;
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{item.name}</Text>
-      <Image source={{ uri: item.image }} style={styles.eventImageLarge} />
-      <Text style={styles.eventType}>{item.type}</Text>
-      <Button mode="contained" onPress={() => navigation.navigate('Payment', { item })}>
-        Book Now
-      </Button>
-    </View>
+    <ScrollView style={styles.container}>
+      <Image source={{ uri: `${IMAGE_URL}${item.poster_path}` }} style={styles.detailsImage} />
+      <View style={styles.detailsContainer}>
+        <Text style={styles.detailsTitle}>{item.title}</Text>
+        <Text style={styles.detailsOverview}>{item.overview}</Text>
+        <View style={styles.detailsInfoContainer}>
+          <Text style={styles.detailsInfoLabel}>Release Date:</Text>
+          <Text style={styles.detailsInfoText}>{item.release_date}</Text>
+        </View>
+        <View style={styles.detailsInfoContainer}>
+          <Text style={styles.detailsInfoLabel}>Rating:</Text>
+          <Text style={styles.detailsInfoText}>{item.vote_average}/10</Text>
+        </View>
+        <TouchableOpacity style={styles.bookButton} onPress={() => navigation.navigate('Payment', { item })}>
+          <Text style={styles.bookButtonText}>Book Now</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 };
 
 // Payment Screen
 const PaymentScreen = ({ route, navigation }) => {
   const { item } = route.params;
-  const [paymentMethod, setPaymentMethod] = useState('credit_card');
+  const [paymentMethod, setPaymentMethod] = useState('creditCard');
+  const [email, setEmail] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [expirationDate, setExpirationDate] = useState('');
+  const [cvv, setCVV] = useState('');
 
-  const handleConfirmPayment = async () => {
-    try {
-      // Save the booking to AsyncStorage
-      const newBooking = {
-        id: Date.now(),
-        name: item.name,
-        type: item.type,
-        date: new Date().toISOString(),
-      };
-      const bookings = JSON.parse(await AsyncStorage.getItem('bookings')) || [];
-      bookings.push(newBooking);
-      await AsyncStorage.setItem('bookings', JSON.stringify(bookings));
-
-      // Navigate to My Bookings Screen
-      navigation.navigate('Bookings');
-    } catch (error) {
-      console.error('Error saving booking:', error);
+  const handlePayment = () => {
+    if (paymentMethod === 'paypal' && !email) {
+      Alert.alert('Error', 'Please enter your PayPal email.');
+      return;
     }
+    if (paymentMethod === 'creditCard' && (!cardNumber || !expirationDate || !cvv)) {
+      Alert.alert('Error', 'Please enter all credit card details.');
+      return;
+    }
+    Alert.alert('Payment Successful', `You have successfully booked ${item.title}`, [
+      {
+        text: 'OK',
+        onPress: () => navigation.navigate('Bookings', { item }),
+      },
+    ]);
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>Payment</Text>
-      <Text>Choose Payment Method:</Text>
+      <Text style={styles.paymentText}>Choose Payment Method:</Text>
       <TouchableOpacity
         style={styles.paymentOption}
-        onPress={() => setPaymentMethod('credit_card')}
+        onPress={() => setPaymentMethod('creditCard')}
       >
-        <Icon name="credit-card" size={24} color="#2196F3" />
-        <Text style={styles.paymentText}>Credit Card</Text>
+        <Icon name="credit-card" size={24} color={paymentMethod === 'creditCard' ? '#E50914' : '#888'} />
+        <Text style={[styles.paymentOptionText, { color: paymentMethod === 'creditCard' ? '#E50914' : '#888' }]}>
+          Credit Card
+        </Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.paymentOption}
         onPress={() => setPaymentMethod('paypal')}
       >
-        <Icon name="paypal" size={24} color="#003087" />
-        <Text style={styles.paymentText}>PayPal</Text>
+        <Icon name="paypal" size={24} color={paymentMethod === 'paypal' ? '#E50914' : '#888'} />
+        <Text style={[styles.paymentOptionText, { color: paymentMethod === 'paypal' ? '#E50914' : '#888' }]}>
+          PayPal
+        </Text>
       </TouchableOpacity>
-      <Button mode="contained" onPress={handleConfirmPayment}>
-        Confirm Payment
-      </Button>
-    </View>
+
+      {paymentMethod === 'paypal' ? (
+        <View style={styles.paymentDetailsContainer}>
+          <Text style={styles.paymentDetailsLabel}>PayPal Email:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your PayPal email"
+            placeholderTextColor="#888"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+          />
+        </View>
+      ) : (
+        <View style={styles.paymentDetailsContainer}>
+          <Text style={styles.paymentDetailsLabel}>Card Number:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your card number"
+            placeholderTextColor="#888"
+            value={cardNumber}
+            onChangeText={setCardNumber}
+            keyboardType="numeric"
+          />
+          <Text style={styles.paymentDetailsLabel}>Expiration Date:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="MM/YY"
+            placeholderTextColor="#888"
+            value={expirationDate}
+            onChangeText={setExpirationDate}
+          />
+          <Text style={styles.paymentDetailsLabel}>CVV:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter CVV"
+            placeholderTextColor="#888"
+            value={cvv}
+            onChangeText={setCVV}
+            keyboardType="numeric"
+            secureTextEntry
+          />
+        </View>
+      )}
+
+      <TouchableOpacity style={styles.confirmButton} onPress={handlePayment}>
+        <Text style={styles.confirmButtonText}>Confirm Payment</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 };
 
 // My Bookings Screen
-const MyBookingsScreen = () => {
+const MyBookingsScreen = ({ route }) => {
   const [bookings, setBookings] = useState([]);
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   useEffect(() => {
-    const fetchBookings = async () => {
-      try {
-        const data = JSON.parse(await AsyncStorage.getItem('bookings')) || [];
-        setBookings(data);
-      } catch (error) {
-        console.error('Error fetching bookings:', error);
-      }
-    };
-    fetchBookings();
-  }, []);
+    if (route.params?.item) {
+      setBookings([...bookings, route.params.item]);
+      setShowConfirmation(true);
+    }
+  }, [route.params?.item]);
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>My Bookings</Text>
-      <FlatList
-        data={bookings}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.bookingCard}>
-            <Text style={styles.bookingName}>{item.name}</Text>
-            <Text style={styles.bookingType}>{item.type}</Text>
-            <Text style={styles.bookingDate}>{new Date(item.date).toLocaleDateString()}</Text>
+      {bookings.length === 0 ? (
+        <Text style={styles.subtitle}>No bookings yet.</Text>
+      ) : (
+        bookings.map((item, index) => (
+          <Animatable.View key={index} animation="fadeInUp" duration={1000}>
+            <View style={styles.bookingCard}>
+              <Image source={{ uri: `${IMAGE_URL}${item.poster_path}` }} style={styles.bookingImage} />
+              <View style={styles.bookingDetails}>
+                <Text style={styles.bookingTitle}>{item.title}</Text>
+                <Text style={styles.bookingDate}>Booked on: {new Date().toLocaleDateString()}</Text>
+              </View>
+            </View>
+          </Animatable.View>
+        ))
+      )}
+      <Modal visible={showConfirmation} transparent={true} animationType="slide">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Booking Confirmed!</Text>
+            <Text style={styles.modalText}>Your booking for {route.params?.item.title} has been confirmed.</Text>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setShowConfirmation(false)}>
+              <Text style={styles.modalButtonText}>OK</Text>
+            </TouchableOpacity>
           </View>
-        )}
-      />
-    </View>
+        </View>
+      </Modal>
+    </ScrollView>
   );
 };
 
 // Profile Screen
 const ProfileScreen = () => {
+  const [name, setName] = useState('John Doe');
+  const [email, setEmail] = useState('john.doe@example.com');
+  const [editing, setEditing] = useState(false);
+
+  const handleSave = () => {
+    setEditing(false);
+    Alert.alert('Profile Updated', 'Your profile has been updated successfully.');
+  };
+
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container}>
       <Text style={styles.title}>Profile</Text>
-      <Text>Name: John Doe</Text>
-      <Text>Email: john.doe@example.com</Text>
-      <Text>Payment History:</Text>
-      <FlatList
-        data={[
-          { id: 1, amount: '$50', date: '2023-10-01' },
-          { id: 2, amount: '$100', date: '2023-10-05' },
-        ]}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <View style={styles.paymentCard}>
-            <Text style={styles.paymentAmount}>{item.amount}</Text>
-            <Text style={styles.paymentDate}>{item.date}</Text>
-          </View>
+      <View style={styles.profileCard}>
+        <Image source={{ uri: 'https://via.placeholder.com/150' }} style={styles.profileImage} />
+        {editing ? (
+          <>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Name"
+              placeholderTextColor="#888"
+            />
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Email"
+              placeholderTextColor="#888"
+            />
+            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+              <Text style={styles.saveButtonText}>Save</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.profileName}>{name}</Text>
+            <Text style={styles.profileEmail}>{email}</Text>
+            <TouchableOpacity style={styles.editButton} onPress={() => setEditing(true)}>
+              <Text style={styles.editButtonText}>Edit Profile</Text>
+            </TouchableOpacity>
+          </>
         )}
-      />
-    </View>
+      </View>
+    </ScrollView>
   );
 };
 
@@ -258,112 +467,279 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#141414',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 16,
-    textAlign: 'center',
-    color: '#FF6B6B', // Red color for titles
+    color: '#E50914',
   },
-  eventCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-  },
-  eventImage: {
-    width: '100%',
-    height: 150,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  eventImageLarge: {
-    width: '100%',
-    height: 200,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  eventTextContainer: {
-    padding: 10,
-  },
-  eventName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  eventType: {
-    fontSize: 14,
-    color: '#888',
-  },
-  searchInput: {
-    backgroundColor: '#FFFFFF',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#DDD',
-  },
-  paymentOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#DDD',
-  },
-  paymentText: {
-    marginLeft: 10,
+  subtitle: {
     fontSize: 16,
-    color: '#333',
+    color: '#888',
+    marginBottom: 16,
+  },
+  movieCard: {
+    width: width * 0.4,
+    marginRight: 16,
+  },
+  movieImage: {
+    width: '100%',
+    height: height * 0.3,
+    borderRadius: 10,
+  },
+  movieTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginTop: 8,
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
   },
   bookingCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    backgroundColor: '#2E2E2E',
+    borderRadius: 10,
+    padding: 10,
   },
-  bookingName: {
-    fontSize: 18,
+  bookingImage: {
+    width: 50,
+    height: 75,
+    borderRadius: 10,
+    marginRight: 16,
+  },
+  bookingDetails: {
+    flex: 1,
+  },
+  bookingTitle: {
+    fontSize: 16,
+    color: '#FFF',
     fontWeight: 'bold',
-    color: '#333',
-  },
-  bookingType: {
-    fontSize: 14,
-    color: '#888',
   },
   bookingDate: {
     fontSize: 14,
     color: '#888',
   },
-  paymentCard: {
-    backgroundColor: '#FFFFFF',
+  profileCard: {
+    alignItems: 'center',
+    backgroundColor: '#2E2E2E',
     borderRadius: 10,
-    padding: 16,
+    padding: 20,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     marginBottom: 16,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
   },
-  paymentAmount: {
-    fontSize: 18,
+  profileName: {
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFF',
+    marginBottom: 8,
   },
-  paymentDate: {
+  profileEmail: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 16,
+  },
+  input: {
+    width: '100%',
+    padding: 10,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 10,
+    color: '#FFF',
+    marginBottom: 16,
+  },
+  editButton: {
+    backgroundColor: '#E50914',
+    padding: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  editButtonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  saveButton: {
+    backgroundColor: '#E50914',
+    padding: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    backgroundColor: '#2E2E2E',
+    padding: 20,
+    borderRadius: 10,
+    width: width * 0.8,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 10,
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 20,
+  },
+  modalButton: {
+    backgroundColor: '#E50914',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2E2E2E',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  searchInput: {
+    flex: 1,
+    padding: 10,
+    fontSize: 16,
+    color: '#FFF',
+  },
+  searchButton: {
+    padding: 10,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchResultCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  searchResultImage: {
+    width: 50,
+    height: 75,
+    borderRadius: 10,
+    marginRight: 16,
+  },
+  searchResultTextContainer: {
+    flex: 1,
+  },
+  searchResultTitle: {
+    fontSize: 16,
+    color: '#FFF',
+  },
+  searchResultOverview: {
     fontSize: 14,
     color: '#888',
+  },
+  detailsImage: {
+    width: '100%',
+    height: height * 0.5,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  detailsContainer: {
+    padding: 16,
+  },
+  detailsTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 8,
+  },
+  detailsOverview: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 16,
+  },
+  detailsInfoContainer: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  detailsInfoLabel: {
+    fontSize: 16,
+    color: '#E50914',
+    fontWeight: 'bold',
+    marginRight: 8,
+  },
+  detailsInfoText: {
+    fontSize: 16,
+    color: '#FFF',
+  },
+  bookButton: {
+    backgroundColor: '#E50914',
+    padding: 15,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bookButtonText: {
+    fontSize: 16,
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  paymentContainer: {
+    padding: 16,
+  },
+  paymentText: {
+    fontSize: 18,
+    color: '#FFF',
+    marginBottom: 16,
+  },
+  paymentOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2E2E2E',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  paymentOptionText: {
+    color: '#FFF',
+    marginLeft: 10,
+  },
+  paymentDetailsContainer: {
+    marginBottom: 16,
+  },
+  paymentDetailsLabel: {
+    fontSize: 16,
+    color: '#FFF',
+    marginBottom: 8,
+  },
+  confirmButton: {
+    backgroundColor: '#E50914',
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  confirmButtonText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#141414',
   },
 });
