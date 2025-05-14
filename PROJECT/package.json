@@ -1,0 +1,43 @@
+{
+  "name": "expense-tracker-native",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start",
+    "test": "jest",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^1.22.3",
+    "@react-navigation/bottom-tabs": "^6.5.20",
+    "@react-navigation/native": "^6.1.17",
+    "@react-navigation/native-stack": "^6.9.26",
+    "date-fns": "^3.5.0",
+    "react": "18.2.0",
+    "react-native": "0.73.6",
+    "react-native-gesture-handler": "^2.15.0",
+    "react-native-reanimated": "^3.8.0",
+    "react-native-safe-area-context": "^4.9.0",
+    "react-native-screens": "^3.29.0",
+    "react-native-vector-icons": "^10.0.3"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/runtime": "^7.24.0",
+    "@react-native/babel-preset": "^0.73.21",
+    "@react-native/eslint-config": "^0.73.2",
+    "@react-native/metro-config": "^0.73.5",
+    "@react-native/typescript-config": "^0.73.1",
+    "@types/react": "^18.2.64",
+    "@types/react-native-vector-icons": "^6.4.18",
+    "@types/react-test-renderer": "^18.0.7",
+    "babel-jest": "^29.7.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.2.5",
+    "typescript": "5.4.2"
+  }
+}
