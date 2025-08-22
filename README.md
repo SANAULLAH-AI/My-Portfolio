@@ -15,6 +15,10 @@ Movie Ticket Booking App: https://youtu.be/BhTP8Vl7Fnw?si=vg6t84efPAxtBUAr
 Job Seeking App: https://youtu.be/MsWldkcTCS8?si=5ISmuIszYZE-pSLM
 
 
-
 Here is my Portfolio: https://github.com/SANAULLAH-AI/My-Portfolio/
 Here are some sample videos of my work : https://youtube.com/@sanaullahshah92?si=RaBQDWR2Vc9_W3YZ
+
+
+*All Social:*  https://moodle.net/resource/zWegMS7k/sanaullahs-portfolio
+
+  -> https://bento.me/sanaullah-7964
